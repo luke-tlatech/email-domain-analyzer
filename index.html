@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>email-domain-analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5fb; min-height: 100vh; }
+  header { background: #4f46e5; color: #fff; padding: 20px 28px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header p { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+  #resetBtn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; display: none; }
+  #resetBtn:hover { background: rgba(255,255,255,0.25); }
+  main { max-width: 960px; margin: 0 auto; padding: 28px; }
+
+  /* Steps */
+  .steps { display: flex; gap: 20px; align-items: center; background: #fff; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 24px; }
+  .step { display: flex; align-items: center; gap: 10px; opacity: 0.35; transition: opacity 0.2s; }
+  .step.active, .step.done { opacity: 1; }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #e5e7eb; color: #6b7280; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .step.active .step-num { background: #818cf8; color: #fff; }
+  .step.done .step-num { background: #4f46e5; color: #fff; }
+  .step-label { font-weight: 500; font-size: 14px; color: #9ca3af; }
+  .step.active .step-label { color: #1a1a2e; }
+  .step.done .step-label { color: #4f46e5; }
+  .step-divider { border-left: 1px solid #e5e7eb; height: 28px; }
+
+  /* Cards */
+  .card { background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .card .sub { color: #666; font-size: 13px; margin-bottom: 18px; }
+  .card .sub code { background: #f1f1f1; padding: 1px 6px; border-radius: 4px; }
+
+  /* Domain input */
+  .input-row { display: flex; gap: 10px; }
+  .input-row input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 15px; outline: none; transition: border 0.2s; }
+  .input-row input:focus { border-color: #4f46e5; }
+  .btn-primary { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 10px 22px; cursor: pointer; font-weight: 600; font-size: 14px; transition: background 0.2s; }
+  .btn-primary:hover { background: #4338ca; }
+  .btn-primary:disabled { background: #c7d2fe; cursor: not-allowed; }
+
+  /* Drop zone */
+  #dropzone { border: 2px dashed #d1d5db; border-radius: 12px; padding: 40px 20px; text-align: center; cursor: pointer; background: #fafafa; transition: all 0.2s; }
+  #dropzone:hover, #dropzone.drag { border-color: #4f46e5; background: #eef2ff; }
+  #dropzone .icon { font-size: 40px; margin-bottom: 10px; }
+  #dropzone .label { font-weight: 500; color: #374151; }
+  #dropzone .hint { font-size: 12px; color: #9ca3af; margin-top: 6px; }
+
+  /* Results bar */
+  .results-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .results-bar .count { font-weight: 600; color: #1a1a2e; }
+  .results-bar .count span { color: #4f46e5; }
+  .btn-secondary { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .btn-secondary:hover { background: #4338ca; }
+
+  /* CSV box */
+  #csvBox { margin-bottom: 16px; display: none; }
+  #csvBox .hint { font-size: 12px; color: #666; margin-bottom: 6px; }
+  #csvBox textarea { width: 100%; height: 160px; font-family: monospace; font-size: 12px; border: 1px solid #ccc; border-radius: 8px; padding: 10px; resize: vertical; background: #f9f9f9; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.1); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: #4f46e5; color: #fff; }
+  th { padding: 10px 14px; text-align: left; white-space: nowrap; }
+  th.center { text-align: center; }
+  tbody tr:nth-child(even) { background: #f8f7ff; }
+  tbody tr:nth-child(odd) { background: #fff; }
+  td { padding: 9px 14px; }
+  td.num { color: #999; }
+  td.name { font-weight: 500; }
+  td.email { color: #4f46e5; font-family: monospace; }
+  td.center { text-align: center; }
+  .badge { background: #eef2ff; color: #4f46e5; border-radius: 20px; padding: 2px 12px; font-weight: 600; }
+  td.raw { color: #666; font-size: 11px; font-family: monospace; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .change-link { margin-left: 10px; color: #9ca3af; cursor: pointer; font-size: 12px; text-decoration: underline; }
+  .change-link:hover { color: #4f46e5; }
+  #step1, #step2, #step3 { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📧 Email Communication Analyzer</h1>
+    <p>Analyze email communications by domain</p>
+  </div>
+  <button id="resetBtn" onclick="reset()">↩ Start Over</button>
+</header>
+
+<main>
+  <!-- Step tracker -->
+  <div class="steps">
+    <div class="step active" id="s1">
+      <div class="step-num">1</div>
+      <div class="step-label">Enter domain</div>
+    </div>
+    <div class="step-divider"></div>
+    <div class="step" id="s2">
+      <div class="step-num">2</div>
+      <div class="step-label">Upload CSV</div>
+    </div>
+    <div class="step-divider"></div>
+    <div class="step" id="s3">
+      <div class="step-num">3</div>
+      <div class="step-label">View results</div>
+    </div>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="card" id="step1">
+    <h2>Step 1 — Enter the domain to analyze</h2>
+    <p class="sub">Enter just the domain portion, e.g. <code>coupang.com</code></p>
+    <div class="input-row">
+      <input type="text" id="domainInput" placeholder="example.com" onkeydown="if(event.key==='Enter') confirmDomain()" autofocus/>
+      <button class="btn-primary" onclick="confirmDomain()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="card" id="step2">
+    <h2>Step 2 — Upload your CSV</h2>
+    <p class="sub" id="domainLabel"></p>
+    <div id="dropzone" onclick="document.getElementById('fileInput').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <div class="icon">📂</div>
+      <div class="label" id="dropLabel">Drag & drop your CSV here, or click to browse</div>
+      <div class="hint">Expected columns: ID, Communication From, Communication To, Communication CC, Communication BCC</div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv" style="display:none" onchange="handleFile(this.files[0])"/>
+  </div>
+
+  <!-- Step 3 -->
+  <div id="step3">
+    <div class="results-bar">
+      <div class="count" id="resultsCount"></div>
+      <button class="btn-secondary" onclick="toggleCSV()">📋 Show CSV to Copy</button>
+    </div>
+    <div id="csvBox">
+      <div class="hint">Click inside to select all, copy, then paste into a .csv file:</div>
+      <textarea id="csvText" readonly onclick="this.select()"></textarea>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>A — Name</th>
+            <th>B — Email Address</th>
+            <th class="center" style="width:130px">C — Message Count</th>
+            <th>D — Raw Values</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+let targetDomain = "";
+let csvVisible = false;
+
+// ── Init ──────────────────────────────────────────────────────────
+window.onload = () => { showStep(1); };
+
+function showStep(n) {
+  document.getElementById("step1").style.display = n === 1 ? "block" : "none";
+  document.getElementById("step2").style.display = n === 2 ? "block" : "none";
+  document.getElementById("step3").style.display = n === 3 ? "block" : "none";
+  document.getElementById("resetBtn").style.display = n > 1 ? "block" : "none";
+  ["s1","s2","s3"].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.className = "step";
+    if (i + 1 < n) el.classList.add("done");
+    else if (i + 1 === n) el.classList.add("active");
+    if (i + 1 < n) el.querySelector(".step-num").textContent = "✓";
+    else el.querySelector(".step-num").textContent = i + 1;
+  });
+}
+
+function confirmDomain() {
+  const val = document.getElementById("domainInput").value.trim().toLowerCase().replace(/^@/, "");
+  if (!val) return;
+  targetDomain = val;
+  document.getElementById("domainLabel").innerHTML =
+    `Analyzing for domain: <strong style="color:#4f46e5">@${targetDomain}</strong> <span class="change-link" onclick="goBack()">change</span>`;
+  showStep(2);
+}
+
+function goBack() { showStep(1); }
+
+function reset() {
+  targetDomain = "";
+  csvVisible = false;
+  document.getElementById("domainInput").value = "";
+  document.getElementById("dropLabel").textContent = "Drag & drop your CSV here, or click to browse";
+  document.getElementById("fileInput").value = "";
+  document.getElementById("tableBody").innerHTML = "";
+  document.getElementById("csvText").value = "";
+  document.getElementById("csvBox").style.display = "none";
+  showStep(1);
+}
+
+// ── File handling ─────────────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("dropzone").classList.remove("drag");
+  handleFile(e.dataTransfer.files[0]);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  document.getElementById("dropLabel").textContent = "⏳ Processing " + file.name + "...";
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const parsed = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+    buildReport(parsed.data, file.name);
+  };
+  reader.readAsText(file);
+}
+
+// ── Parsing ───────────────────────────────────────────────────────
+function parseEmailField(field) {
+  if (!field) return [];
+  const results = [];
+  const re = /("(?:[^"]*)"[\s\S]*?<[^>]+>|[^<,]+<[^>]+>|[^\s,]+@[^\s,]+)/g;
+  let m;
+  while ((m = re.exec(field)) !== null) {
+    const raw = m[0].trim();
+    if (!raw) continue;
+    const emailMatch = raw.match(/<([^>]+)>/);
+    const email = emailMatch ? emailMatch[1].trim().toLowerCase() : raw.toLowerCase();
+    if (!email.includes("@")) continue;
+    const domain = email.split("@")[1];
+    const parenMatch = raw.match(/\(([^)]+)\)/);
+    let name = parenMatch ? parenMatch[1].trim() : null;
+    if (!name) {
+      const localPart = email.split("@")[0];
+      if (localPart.includes(".")) {
+        name = localPart.split(".").map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ");
+      } else {
+        name = raw.replace(/<[^>]+>/g, "").replace(/\[[^\]]*\]/g, "").trim() || localPart;
+      }
+    }
+    results.push({ email, name, domain, raw });
+  }
+  return results;
+}
+
+// ── Report ────────────────────────────────────────────────────────
+function buildReport(data, fileName) {
+  const COLS = ["Communication From","Communication To","Communication CC","Communication BCC"];
+  const map = {};
+
+  for (const row of data) {
+    const id = String(row["ID"] || row["id"] || row[Object.keys(row)[0]] || "").trim();
+    let hasDomain = false;
+    for (const col of COLS) {
+      if (parseEmailField(row[col]).some(p => p.domain === targetDomain)) { hasDomain = true; break; }
+    }
+    if (!hasDomain) continue;
+    for (const col of COLS) {
+      for (const p of parseEmailField(row[col])) {
+        if (p.domain !== targetDomain) continue;
+        if (!map[p.email]) map[p.email] = { email: p.email, names: new Set(), ids: new Set(), raws: new Set() };
+        if (p.name) map[p.email].names.add(p.name);
+        if (id) map[p.email].ids.add(id);
+        if (p.raw) map[p.email].raws.add(p.raw);
+      }
+    }
+  }
+
+  const result = Object.values(map).map(({ email, names, ids, raws }) => {
+    const bestName = [...names].sort((a, b) => b.length - a.length)[0] || email.split("@")[0];
+    return { name: bestName, email, count: ids.size, rawValues: [...raws].join("; ") };
+  }).sort((a, b) => b.count - a.count);
+
+  renderReport(result, fileName);
+}
+
+function renderReport(report, fileName) {
+  // Count
+  document.getElementById("resultsCount").innerHTML =
+    `Found <span>${report.length}</span> unique <span>@${targetDomain}</span> contacts in <strong>${fileName}</strong>`;
+
+  // Table
+  const tbody = document.getElementById("tableBody");
+  tbody.innerHTML = "";
+  report.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="num">${i+1}</td>
+      <td class="name">${esc(r.name)}</td>
+      <td class="email">${esc(r.email)}</td>
+      <td class="center"><span class="badge">${r.count}</span></td>
+      <td class="raw" title="${esc(r.rawValues)}">${esc(r.rawValues)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // CSV
+  const lines = ["Name,Email Address,Message Count,Raw Values"];
+  for (const r of report)
+    lines.push(`"${r.name}","${r.email}",${r.count},"${(r.rawValues||"").replace(/"/g,'""')}"`);
+  document.getElementById("csvText").value = lines.join("\n");
+
+  showStep(3);
+}
+
+function toggleCSV() {
+  csvVisible = !csvVisible;
+  const box = document.getElementById("csvBox");
+  box.style.display = csvVisible ? "block" : "none";
+  document.querySelector(".btn-secondary").textContent = csvVisible ? "Hide CSV" : "📋 Show CSV to Copy";
+}
+
+function esc(str) {
+  return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>
